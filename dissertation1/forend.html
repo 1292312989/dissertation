@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNA Sequence Prediction</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/1.0.28/vue.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f4f4f4;
+            color: #333;
+        }
+
+        .form-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        }
+
+        input[type="text"],
+        .fileBox {
+            border: 2px solid #ccc;
+            border-radius: 4px;
+        }
+
+        input[type="text"],
+        button {
+            margin-top: 10px;
+            padding: 10px;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border-color .3s, box-shadow .3s;
+        }
+
+        input[type="text"]:focus,
+        button:focus {
+            border-color: #66afe9;
+            outline: none;
+        }
+
+        button {
+            background-color: #4CAF50;
+            /* Green */
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        button:active {
+            background-color: #397d34;
+            /* Darker green when clicked */
+            box-shadow: 0 5px #666;
+            /* Simulate button press */
+            transform: translateY(4px);
+        }
+
+        .fileBox {
+            position: relative;
+            margin-top: 10px;
+            text-align: center;
+            line-height: 50px;
+        }
+
+        .fileBox span {
+            display: block;
+            width: 100%;
+            height: 50px;
+        }
+
+        .fileBox input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 99;
+            filter: alpha(opacity=0);
+            -moz-opacity: 0;
+            -khtml-opacity: 0;
+            opacity: 0;
+        }
+
+        .loading,
+        .results {
+            margin-top: 20px;
+            background: #e9e9e9;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+
+        #chartContainer {
+            width: 100%;
+            height: 400px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .form-container {
+                padding: 10px;
+                margin: 20px;
+            }
+
+            input[type="text"],
+            input[type="file"],
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <h1>DNA Sequence Predictor</h1>
+        <div class="form-container">
+            <form v-on:submit.prevent="onSubmit">
+                <label for="sequence">Enter DNA Sequence:</label>
+                <input type="text" id="sequence" v-model="sequence" placeholder="Enter DNA sequence here">
+                <label for="file">Or upload DNA sequence file:</label>
+
+                <div class="fileBox">
+                    <span>choose file</span>
+                    <input type="file" id="file" v-on:change="onFileChange" title="Choose File">
+                </div>
+
+
+                <button type="submit" :disabled="!canSubmit || loading">Predict</button>
+            </form>
+        </div>
+
+        <div v-if="loading" class="loading">Processing your request...</div>
+        <canvas id="chartContainer"></canvas>
+    </div>
+
+    <script>
+        const APIList = {
+            predictions: {
+                method: 'POST',
+                url: 'http://10.66.176.184:5000/predict'
+            }
+        };
+
+        new Vue({
+            el: '#app',
+            data: {
+                sequence: '',
+                file: null,
+                loading: false,
+                results: '',
+                resultsVisible: false,
+                canSubmit: true
+            },
+            methods: {
+                onFileChange(e) {
+                    this.file = e.target.files[0];
+                    if (this.file) {
+                        this.sequence = '';
+                        document.getElementById('sequence').value = '';
+                    }
+                },
+                async onSubmit() {
+                    if (!this.sequence && !this.file) {
+                        alert('Please provide a DNA sequence or upload a file!');
+                        return;
+                    }
+                    this.loading = true;
+                    this.resultsVisible = false;
+                    const formData = new FormData();
+                    if (this.sequence) {
+                        formData.append('sequences', JSON.stringify([this.sequence]));
+                    }
+                    if (this.file) {
+                        formData.append('file', this.file);
+                    }
+
+                    try {
+                        const response = await fetch(APIList.predictions.url, {
+                            method: 'POST',
+                            body: formData,
+                            credentials: 'include' // Ensure front-end requests support carrying credentials
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            this.results = `<p>Predicted Activity: ${data.activity}</p>`;
+                            this.drawHistogram(data.activity);
+                        } else {
+                            this.results = `<p>Error: ${data.message}</p>`;
+                        }
+                        this.resultsVisible = true;
+                    } catch (error) {
+                        console.error('Network error:', error);
+                        this.results = `<p>Network error: Unable to connect to server</p>`;
+                        this.resultsVisible = true;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                drawHistogram(activity) {
+                    const ctx = document.getElementById('chartContainer').getContext('2d');
+                    const histogramChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Activity'],
+                            datasets: [{
+                                label: 'Predicted Activity Level',
+                                data: [activity],
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
