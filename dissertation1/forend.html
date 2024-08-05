@@ -128,17 +128,13 @@
                 <label for="sequence">Enter DNA Sequence:</label>
                 <input type="text" id="sequence" v-model="sequence" placeholder="Enter DNA sequence here">
                 <label for="file">Or upload DNA sequence file:</label>
-
                 <div class="fileBox">
                     <span>choose file</span>
                     <input type="file" id="file" v-on:change="onFileChange" title="Choose File">
                 </div>
-
-
                 <button type="submit" :disabled="!canSubmit || loading">Predict</button>
             </form>
         </div>
-
         <div v-if="loading" class="loading">Processing your request...</div>
         <canvas id="chartContainer"></canvas>
     </div>
@@ -170,6 +166,7 @@
                     }
                 },
                 async onSubmit() {
+                    // Check if a sequence or file has been provided
                     if (!this.sequence && !this.file) {
                         alert('Please provide a DNA sequence or upload a file!');
                         return;
@@ -177,6 +174,7 @@
                     this.loading = true;
                     this.resultsVisible = false;
                     const formData = new FormData();
+                    // Append sequence or file to FormData
                     if (this.sequence) {
                         formData.append('sequences', JSON.stringify([this.sequence]));
                     }
@@ -184,6 +182,7 @@
                         formData.append('file', this.file);
                     }
 
+                    // Send request to the server
                     try {
                         const response = await fetch(APIList.predictions.url, {
                             method: 'POST',
@@ -192,13 +191,20 @@
                         });
                         const data = await response.json();
                         if (response.ok) {
+                            // Process the response if no errors
                             this.results = `<p>Predicted Activity: ${data.activity}</p>`;
                             this.drawHistogram(data.activity);
+                            // A download link if a result file is available
+                            if (data.result_file) {
+                                this.results += `<p><a href='/download/${data.result_file}' download='predictions.csv'>Download Results</a></p>`;
+                            }
                         } else {
+                            // Handle errors from the server
                             this.results = `<p>Error: ${data.message}</p>`;
                         }
                         this.resultsVisible = true;
                     } catch (error) {
+                        // Handle network errors
                         console.error('Network error:', error);
                         this.results = `<p>Network error: Unable to connect to server</p>`;
                         this.resultsVisible = true;
@@ -206,6 +212,7 @@
                         this.loading = false;
                     }
                 },
+                // Draw a chart
                 drawHistogram(activity) {
                     const ctx = document.getElementById('chartContainer').getContext('2d');
                     const histogramChart = new Chart(ctx, {

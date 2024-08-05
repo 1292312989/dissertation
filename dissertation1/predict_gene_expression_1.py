@@ -6,6 +6,8 @@ from keras.models import model_from_json
 import logging
 from werkzeug.utils import secure_filename
 import os
+import pandas as pd
+from flask import send_from_directory
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -111,7 +113,12 @@ def perform_prediction_and_respond(sequences):
         processed_sequences = process_seqs(sequences, 150)
         predictions = global_model.predict(processed_sequences.reshape(len(processed_sequences), 4, 150))
         activities = [float(pred) for pred in predictions.flatten()]
-        return jsonify({'activities': activities})
+        # Save results to a CSV file
+        df = pd.DataFrame(activities, columns=['Predicted Activity'])
+        result_filename = 'predictions.csv'
+        result_filepath = os.path.join(app.config['UPLOAD_FOLDER'], result_filename)
+        df.to_csv(result_filepath, index=False)
+        return jsonify({'activities': activities, 'result_file': result_filename})
     except Exception as e:
         logger.error(f"Error processing sequences: {e}")
         return jsonify({'error': 'Error processing the sequences'}), 500
@@ -138,7 +145,20 @@ def predict_sequences():
     sequences = request.json.get('sequences', [])
     if not sequences:
         return jsonify({'error': 'No DNA sequences provided'}), 400
+
+        # Check if all sequences contain only valid characters
+    valid_bases = {'A', 'T', 'C', 'G'}
+    if any(not set(seq.upper()).issubset(valid_bases) for seq in sequences):
+        return jsonify({'error': 'Invalid DNA sequence. Only A, T, C, G characters are allowed.'}), 400
+
     return perform_prediction_and_respond(sequences)
+
+@app.route('/download/<filename>')
+def download_file(filename):
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(file_path):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+    return jsonify({'error': 'File not found'}), 404
 
 
 if __name__ == '__main__':
